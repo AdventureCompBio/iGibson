@@ -18,11 +18,22 @@ import tasknet
 import gibson2
 from gibson2.objects.vr_objects import VrAgent
 from gibson2.render.mesh_renderer.mesh_renderer_cpu import MeshRendererSettings
-from gibson2.render.mesh_renderer.mesh_renderer_vr import VrSettings
+from gibson2.render.mesh_renderer.mesh_renderer_vr import VrSettings, VrConditionSwitcher
+from gibson2.scenes.igibson_indoor_scene import InteractiveIndoorScene
 from gibson2.simulator import Simulator
 from gibson2.task.task_base import iGTNTask
 from gibson2.utils.vr_logging import VRLogWriter
 
+
+import sys 
+def info(type, value, tb):
+    if hasattr(sys, 'ps1') or not sys.stderr.isatty():
+        sys.__excepthook__(type, value, tb)
+    else:
+        traceback.print_exception(type, value, tb)
+        print
+        pdb.post_mortem(tb)
+        
 
 tasknet.set_backend("iGibson")
 
@@ -41,27 +52,24 @@ background_texture = os.path.join(
 
 # VR rendering settings
 vr_rendering_settings = MeshRendererSettings(optimized=True,
-                                             fullscreen=False,
-                                             env_texture_filename=hdr_texture,
-                                             env_texture_filename2=hdr_texture2,
-                                             env_texture_filename3=background_texture,
-                                             light_modulation_map_filename=light_modulation_map_filename,
-                                             enable_shadow=True,
-                                             enable_pbr=True,
-                                             msaa=True,
-                                             light_dimming_factor=1.0)
+                                            fullscreen=False,
+                                            env_texture_filename=hdr_texture,
+                                            env_texture_filename2=hdr_texture2,
+                                            env_texture_filename3=background_texture,
+                                            light_modulation_map_filename=light_modulation_map_filename,
+                                            enable_shadow=True, 
+                                            enable_pbr=True,
+                                            msaa=True,
+                                            light_dimming_factor=1.0)
 # VR system settings
 # Change use_vr to toggle VR mode on/off
-vr_settings = VrSettings(use_vr=True)
-s = Simulator(mode='vr',
-              rendering_settings=vr_rendering_settings,
-              vr_settings=vr_settings)
+# vr_settings = VrSettings(use_vr=True)     
+vr_settings = VrSettings()
+s = Simulator(mode='vr', 
+            rendering_settings=vr_rendering_settings,
+            vr_settings=vr_settings)
 
-igtn_task = iGTNTask('assembling_gift_baskets_filtered', 1)
-# igtn_task = iGTNTask('packing_lunches_filtered', 1)
-# igtn_task = iGTNTask('sorting_books_filtered', 0)
-# igtn_task.initialize_simulator(simulator=s, scene_id='Beechwood_0_int')
-pdb.set_trace()
+igtn_task = iGTNTask('assembling_gift_baskets_filtered', 0)
 igtn_task.initialize_simulator(simulator=s)
 
 kitchen_middle = [-3.7, -2.7, 1.8]
@@ -77,8 +85,16 @@ if not vr_settings.use_vr:
 
 if vr_settings.use_vr:
     # Since vr_height_offset is set, we will use the VR HMD true height plus this offset instead of the third entry of the start pos
-    vr_agent = VrAgent(s)
-    s.set_vr_start_pos(kitchen_middle, vr_height_offset=-0.1)
+    vr_agent = VrAgent(igtn_task.simulator)
+    igtn_task.simulator.set_vr_start_pos(kitchen_middle, vr_height_offset=-0.1)
+    # Create condition switcher to manage condition switching.
+    # Note: to start with, the overlay is shown but there is no text 
+    # The user needs to press the "switch" button to make the next condition appear 
+    vr_cs = VrConditionSwitcher(
+        igtn_task.simulator, 
+        igtn_task.show_instruction, 
+        igtn_task.iterate_instruction
+    )
 
 
 mode = 'save'
@@ -86,8 +102,7 @@ mode = 'save'
 if mode == 'save':
     # Saves every 2 seconds or so (200 / 90fps is approx 2 seconds)
     vr_log_path = "./log.hdf5"
-    vr_writer = VRLogWriter(frames_before_write=200,
-                            log_filepath=vr_log_path, profiling_mode=True)
+    vr_writer = VRLogWriter(frames_before_write=200, log_filepath=vr_log_path, profiling_mode=True)
 
     # Call set_up_data_storage once all actions have been registered (in this demo we only save states so there are none)
     # Despite having no actions, we need to call this function
@@ -97,13 +112,22 @@ if mode == 'save':
 
 # Main simulation loop
 while True:
-    s.step()
+    igtn_task.simulator.step()
+    print('SUCCESS:', igtn_task.check_success())
 
     # Don't update VR agents or query events if we are not using VR
     if not vr_settings.use_vr:
         continue
     else:
         vr_agent.update()
+
+        # Switch to different condition with right toggle 
+        if igtn_task.simulator.query_vr_event('right_controller', 'overlay_toggle'):
+            vr_cs.switch_condition()
+        
+        # Hide/show condition switcher with left toggle
+        if igtn_task.simulator.query_vr_event('left_controller', 'overlay_toggle'):
+            vr_cs.toggle_show_state()
 
     # Update VR objects
     if mode == 'save':
