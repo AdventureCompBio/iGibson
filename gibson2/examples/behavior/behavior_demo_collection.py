@@ -3,6 +3,7 @@ Main BEHAVIOR demo collection entrypoint
 """
 
 import argparse
+import copy
 import datetime
 import os
 
@@ -16,6 +17,8 @@ from gibson2.simulator import Simulator
 from gibson2.task.task_base import iGTNTask
 from gibson2.utils.ig_logging import IGLogWriter
 
+POST_TASK_STEPS = 200
+PHYSICS_WARMING_STEPS = 200
 
 def parse_args():
     scene_choices = [
@@ -130,7 +133,6 @@ def collect_demo(task, task_id, scene, vr_log_path=None, disable_save=False, max
                 task, task_id, scene, timestamp)
         log_writer = IGLogWriter(
             s,
-            frames_before_write=200,
             log_filepath=vr_log_path,
             task=igtn_task,
             store_vr=False if no_vr else True,
@@ -141,8 +143,8 @@ def collect_demo(task, task_id, scene, vr_log_path=None, disable_save=False, max
         log_writer.set_up_data_storage()
 
     satisfied_predicates_cached = {}
-    post_task_steps = 200
-    physics_warming_steps = 200
+    post_task_steps = copy.deepcopy(POST_TASK_STEPS)
+    physics_warming_steps = copy.deepcopy(PHYSICS_WARMING_STEPS)
 
     steps = 0
     while max_steps < 0 or steps < max_steps:
