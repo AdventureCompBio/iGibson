@@ -16,7 +16,7 @@ def create_checkpoints(demo_file, checkpoint_directory, checkpoint_every_n_steps
         if not igtn_task.current_success and igtn_task.simulator.frame_count % checkpoint_every_n_steps == 0:
             save_checkpoint(igtn_task.simulator, checkpoint_directory)
 
-    safe_replay_demo(demo_file, no_vr=True, step_callback=step_callback)
+    safe_replay_demo(demo_file, mode="headless", step_callback=step_callback)
 
 
 def main():
